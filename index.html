@@ -79,7 +79,7 @@ padding:9px 2px;border-bottom:1px solid var(--line)}
   <button id="dataBtn" style="flex:0 0 auto;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:14px;color:var(--brand)">导入/导出</button>
 </div>
 <div class="segs" id="segs">
-  <div class="seg on" data-p="recent">最近年化</div>
+  <div class="seg on" data-p="week">近一周年化</div>
   <div class="seg" data-p="month">按月(近30天)</div>
   <div class="seg" data-p="year">按年(近365天)</div>
   <div class="seg" data-p="cum">累计年化</div>
@@ -100,7 +100,7 @@ padding:9px 2px;border-bottom:1px solid var(--line)}
 const KEY='licai_records_v1';
 const DAY=86400000;
 let state=load();
-let period='recent';   // recent | month | year | cum
+let period='week';     // week | month | year | cum
 let bankSel='';
 
 function load(){
@@ -189,15 +189,14 @@ function lastYield(p){
 }
 function yieldOf(p,per){
   if(per==='cum')return cumYield(p);
-  if(per==='recent')return lastYield(p);
-  return winYield(p,per==='month'?30:365);
+  return winYield(p,per==='week'?7:per==='month'?30:365);
 }
 function rateHtml(v,cls){
   if(v===null||isNaN(v))return '<span class="na">—</span>';
   const sign=v>=0?'+':'';
   return '<span class="'+(v>=0?'up':'down')+'">'+sign+v.toFixed(2)+'%</span>';
 }
-const PLAB={recent:'最近年化',month:'近一月年化',year:'近一年年化',cum:'累计年化'};
+const PLAB={week:'近一周年化',month:'近一月年化',year:'近一年年化',cum:'累计年化'};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
 function profitHtml(v){
@@ -221,17 +220,17 @@ function sparkline(p){
     +'<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" '
     +'stroke-linejoin="round" stroke-linecap="round"/></svg>';
 }
-// 近期趋势块：走势图 + 最近一笔/近30天实际赚的钱 + 日均
+// 近期趋势块：走势图 + 近7天/近30天实际赚的钱 + 日均（按日历天数，含0收益的日子）
 function trendHtml(p){
   const sl=sparkline(p);
   if(!sl)return '<div class="hint" style="margin-bottom:12px">记满两条以上「持仓收益」才能看出近期走势。</div>';
-  const gl=lastGain(p),g30=windowGain(p,30);
+  const g7=windowGain(p,7),g30=windowGain(p,30);
   const cell=(lab,g)=>'<div style="flex:1"><div style="font-size:11px;color:var(--sub)">'+lab+'</div>'
     +'<div style="font-size:15px;font-weight:600">'+(g?moneyHtml(g.money):'<span class="na">需补录</span>')+'</div>'
     +(g?'<div style="font-size:11px;color:var(--sub)">'+g.days+'天·日均 '+moneyHtml(g.money/g.days)+'</div>':'')+'</div>';
   return '<div style="background:#fafbfe;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:14px">'
     +'<div style="font-size:12px;color:var(--sub);margin-bottom:4px">持仓收益走势</div>'+sl
-    +'<div style="display:flex;gap:12px;margin-top:8px">'+cell('最近一笔收益',gl)+cell('近30天收益',g30)+'</div></div>';
+    +'<div style="display:flex;gap:12px;margin-top:8px">'+cell('近7天收益',g7)+cell('近30天收益',g30)+'</div></div>';
 }
 function cardHtml(p){
   const prim=yieldOf(p,period);
@@ -244,9 +243,9 @@ function cardHtml(p){
     second='<div class="rate small"><div class="lab">累计年化</div>'
       +'<div class="val">'+rateHtml(cum)+'</div></div>';
   }
-  const gl=lastGain(p);
-  const wl='<div class="rate small"><div class="lab">最近收益'+(gl?'('+gl.days+'天)':'')+'</div><div class="val">'
-    +(gl?moneyHtml(gl.money):'<span class="na">需补录</span>')+'</div></div>';
+  const g7=windowGain(p,7);
+  const wl='<div class="rate small"><div class="lab">近7天收益'+(g7?'('+g7.days+'天)':'')+'</div><div class="val">'
+    +(g7?moneyHtml(g7.money):'<span class="na">需补录</span>')+'</div></div>';
   const redeemTag=p.status==='redeemed'?'<span class="tag-redeem">已赎回</span>':'';
   const buyTxt=nbuy>1?('首次 '+esc(firstBuyDate(p))+'·'+nbuy+'笔'):('购买 '+esc(firstBuyDate(p)));
   return '<div class="card" data-id="'+p.id+'">'
@@ -376,7 +375,7 @@ function detail(id){
     '<h3>'+esc(p.name)+'</h3>'
     +'<div class="detail-meta"><b>'+esc(p.bank||'未填银行')+'</b> · 首次买入 '+esc(firstBuyDate(p))
     +' · 持有 <b>'+days+'</b> 天<br>本金合计 <b>'+fmtNum(prin)+'</b>（'+buys.length+' 笔）· 持仓收益 '+profitHtml(latestProfit(p))+'<br>'
-    +'最近年化 '+rateHtml(lastYield(p))+' · 累计年化 '+rateHtml(cumYield(p))+'</div>'
+    +'近一周年化 '+rateHtml(winYield(p,7))+' · 累计年化 '+rateHtml(cumYield(p))+'</div>'
     +trendHtml(p)
     +'<div class="fld"><label>买入记录（可多次加仓）</label><div class="snaps">'+buyHtml+'</div></div>'
     +'<div class="buyrow" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:14px">'
