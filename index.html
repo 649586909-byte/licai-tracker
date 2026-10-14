@@ -76,6 +76,7 @@ padding:9px 2px;border-bottom:1px solid var(--line)}
 </div>
 <div class="filters">
   <select id="bankFilter"><option value="">全部银行</option></select>
+  <button id="monthBtn" style="flex:0 0 auto;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:14px;color:var(--brand)">月度收益</button>
   <button id="dataBtn" style="flex:0 0 auto;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:14px;color:var(--brand)">导入/导出</button>
 </div>
 <div class="segs" id="segs">
@@ -529,9 +530,55 @@ function doImport(mode){
   alert('导入成功：共 '+state.length+' 条');
 }
 
+// 某日的累计持仓收益（阶梯取值：取不晚于该日的最后一条记录）
+function cumAt(p,ds){let v=0;for(const pt of points(p)){if(parseD(pt.date)<=parseD(ds))v=pt.profit;else break;}return v;}
+function ymd(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
+
+// 月度收益：按自然月汇总（受银行筛选影响），并给出年化2%的基准
+function openMonthly(){
+  const prods=state.filter(p=>!bankSel||p.bank===bankSel);
+  if(!prods.length){openSheet('<h3>月度收益</h3><div class="empty">暂无数据</div>'
+    +'<div class="btns"><button class="btn sec" onclick="closeSheet()">关闭</button></div>');return;}
+  const minTs=Math.min.apply(0,prods.map(p=>parseD(firstBuyDate(p))));
+  const sd=new Date(minTs),td=new Date(parseD(today()));
+  const months=[];let y=sd.getFullYear(),m=sd.getMonth();
+  while(y<td.getFullYear()||(y===td.getFullYear()&&m<=td.getMonth())){months.push([y,m]);m++;if(m>11){m=0;y++;}}
+  const todayStr=today(),todayDay=td.getDate();
+  let rows='';
+  months.reverse().forEach(a=>{
+    const yy=a[0],mm=a[1];
+    const lastDay=new Date(yy,mm+1,0).getDate();
+    const isCur=(yy===td.getFullYear()&&mm===td.getMonth());
+    const startM=ymd(yy,mm,1),endCap=isCur?todayStr:ymd(yy,mm,lastDay),dim=isCur?todayDay:lastDay;
+    const db=new Date(yy,mm,1);db.setDate(0);
+    const dbStr=ymd(db.getFullYear(),db.getMonth(),db.getDate());
+    let earned=0,capDays=0;
+    prods.forEach(p=>{earned+=cumAt(p,endCap)-cumAt(p,dbStr);capDays+=capitalDaysBetween(p,startM,endCap);});
+    const rate=capDays>0?earned/capDays*dim*100:0;
+    const bench=capDays*0.02/365;
+    const ok=earned>=bench;
+    rows+='<tr style="border-bottom:1px solid var(--line)">'
+      +'<td style="padding:9px 4px">'+yy+'-'+String(mm+1).padStart(2,'0')+(isCur?' <span style="font-size:10px;color:var(--sub)">至今</span>':'')+'</td>'
+      +'<td style="padding:9px 4px;text-align:right">'+profitHtml(earned)+'</td>'
+      +'<td style="padding:9px 4px;text-align:right;color:'+(rate>=0?'var(--up)':'var(--down)')+'">'+(rate>=0?'+':'')+rate.toFixed(3)+'%</td>'
+      +'<td style="padding:9px 4px;text-align:right;color:var(--sub)">'+fmtNum(bench)+'</td>'
+      +'<td style="padding:9px 4px;text-align:center">'+(ok?'<span style="color:var(--up)">达标</span>':'<span style="color:var(--down)">未达</span>')+'</td></tr>';
+  });
+  openSheet('<h3>月度收益'+(bankSel?'·'+esc(bankSel):'')+'</h3>'
+    +'<div class="hint">月收益率=当月收益/当月平均在投本金（未年化）。基准列为「年化2%」该月应得收益：本金×2%×当月天数/365，约每月 0.164%。</div>'
+    +'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    +'<thead><tr style="color:var(--sub);font-size:12px;border-bottom:1px solid var(--line)">'
+    +'<th style="padding:6px 4px;text-align:left">月份</th><th style="padding:6px 4px;text-align:right">月收益</th>'
+    +'<th style="padding:6px 4px;text-align:right">月收益率</th><th style="padding:6px 4px;text-align:right">2%基准</th>'
+    +'<th style="padding:6px 4px;text-align:center">达标</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="hint">注：早期无每日明细的产品，更早收益被并入「基线」那一个月（多为9月），故 9 月偏高、更早月份偏低；10 月及有完整每日记录的产品准确。</div>'
+    +'<div class="btns"><button class="btn sec" onclick="closeSheet()">关闭</button></div>');
+}
+
 // 事件
 document.getElementById('addBtn').addEventListener('click',()=>productForm(null));
 document.getElementById('dataBtn').addEventListener('click',openData);
+document.getElementById('monthBtn').addEventListener('click',openMonthly);
 document.getElementById('bankFilter').addEventListener('change',e=>{bankSel=e.target.value;render()});
 document.getElementById('segs').addEventListener('click',e=>{
   const s=e.target.closest('.seg');if(!s)return;
