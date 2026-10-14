@@ -76,6 +76,7 @@ padding:9px 2px;border-bottom:1px solid var(--line)}
 </div>
 <div class="filters">
   <select id="bankFilter"><option value="">全部银行</option></select>
+  <button id="dataBtn" style="flex:0 0 auto;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:14px;color:var(--brand)">导入/导出</button>
 </div>
 <div class="segs" id="segs">
   <div class="seg on" data-p="recent">最近年化</div>
@@ -457,8 +458,52 @@ function delProduct(id){
   state=state.filter(x=>x.id!==id);save();closeSheet();render();
 }
 
+// 导入 / 导出
+function openData(){
+  const cur=JSON.stringify(state,null,2);
+  openSheet(
+    '<h3>导入 / 导出数据</h3>'
+    +'<div class="hint">数据只存在本机浏览器。导出可做备份或换设备迁移；导入可粘贴一段 JSON。</div>'
+    +'<div class="fld"><label>当前数据（可复制备份）</label>'
+    +'<textarea id="d_out" readonly style="width:100%;height:110px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;font-family:monospace">'+esc(cur)+'</textarea></div>'
+    +'<button class="btn sec" style="width:100%;margin-bottom:14px" onclick="copyOut()">复制上面内容</button>'
+    +'<div class="fld"><label>粘贴要导入的 JSON</label>'
+    +'<textarea id="d_in" placeholder="在此粘贴" style="width:100%;height:110px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;font-family:monospace"></textarea></div>'
+    +'<div class="btns"><button class="btn sec" onclick="doImport(\'merge\')">追加导入</button>'
+    +'<button class="btn pri" onclick="doImport(\'replace\')">替换导入</button></div>'
+    +'<div class="btns"><button class="btn sec" onclick="closeSheet()">关闭</button></div>'
+  );
+}
+function copyOut(){
+  const t=document.getElementById('d_out');t.select();
+  try{document.execCommand('copy');alert('已复制');}catch(e){alert('请手动长按复制');}
+}
+function doImport(mode){
+  let arr;
+  try{arr=JSON.parse(document.getElementById('d_in').value);}catch(e){alert('不是合法 JSON：'+e.message);return;}
+  if(!Array.isArray(arr)){alert('顶层必须是数组 []');return;}
+  const clean=arr.filter(p=>p&&p.name).map(p=>{
+    const o={id:p.id||uid(),bank:p.bank||'',name:p.name,
+      buys:Array.isArray(p.buys)?p.buys:(p.purchaseDate?[{date:p.purchaseDate,amount:Number(p.principal)}]:[]),
+      snapshots:Array.isArray(p.snapshots)?p.snapshots:[],status:p.status==='redeemed'?'redeemed':'active'};
+    if(p.redeemDate)o.redeemDate=p.redeemDate;
+    recalc(o);return o;
+  });
+  if(!clean.length){alert('没解析到有效产品');return;}
+  if(mode==='replace'){
+    if(!confirm('替换导入会清空现有 '+state.length+' 条，用导入的 '+clean.length+' 条覆盖，确定？'))return;
+    state=clean;
+  }else{
+    const ids=new Set(state.map(x=>x.id));
+    clean.forEach(p=>{if(ids.has(p.id))p.id=uid();state.push(p);});
+  }
+  save();closeSheet();render();
+  alert('导入成功：共 '+state.length+' 条');
+}
+
 // 事件
 document.getElementById('addBtn').addEventListener('click',()=>productForm(null));
+document.getElementById('dataBtn').addEventListener('click',openData);
 document.getElementById('bankFilter').addEventListener('change',e=>{bankSel=e.target.value;render()});
 document.getElementById('segs').addEventListener('click',e=>{
   const s=e.target.closest('.seg');if(!s)return;
