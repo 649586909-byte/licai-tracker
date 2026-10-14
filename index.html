@@ -129,6 +129,14 @@ function capitalDays(p,uptoDate){
   return buysOf(p).reduce((s,b)=>parseD(b.date)<=parseD(uptoDate)
     ? s+Number(b.amount)*daysBetween(b.date,uptoDate):s,0);
 }
+// 区间 [fromDate,toDate] 内的本金×天数：区间前已投入的按整段算，区间内加仓的按剩余天数算
+function capitalDaysBetween(p,fromDate,toDate){
+  return buysOf(p).reduce((s,b)=>{
+    if(parseD(b.date)>parseD(toDate))return s;
+    const start=parseD(b.date)>parseD(fromDate)?b.date:fromDate;
+    return s+Number(b.amount)*daysBetween(start,toDate);
+  },0);
+}
 
 // 持仓收益数据点：首次买入日(收益0) + 各条「持仓收益」记录，按日期升序
 function points(p){
@@ -170,11 +178,11 @@ function windowGain(p,winDays){
   return {money:last.profit-anchor.profit,days:daysBetween(anchor.date,last.date),
           from:anchor.date,to:last.date};
 }
-// 区间年化：用区间收益 / 当前总本金 折算
+// 区间年化：区间收益 / 区间内本金×天数 折算（含期间加仓按实际天数加权）
 function winYield(p,winDays){
   const g=windowGain(p,winDays);if(!g)return null;
-  const base=principalAsOf(p,g.to);if(base<=0)return null;
-  return g.money/base*365/g.days*100;
+  const cd=capitalDaysBetween(p,g.from,g.to);if(cd<=0)return null;
+  return g.money/cd*365*100;
 }
 // 最近一笔区间：最新两条数据点之间的收益（偶尔记一次时，这就是最能反映近况的指标）
 function lastGain(p){
