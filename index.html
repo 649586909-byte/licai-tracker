@@ -204,16 +204,37 @@ function profitHtml(v){
 }
 function moneyHtml(v){return '<span class="'+(v>=0?'up':'down')+'">'+(v>=0?'+':'')+fmtNum(v)+' 元</span>';}
 
-// 持仓收益走势迷你图（SVG）：斜率/弯曲即可看出近期变好变坏
+// 近N天「每日收益」序列：相邻两条记录间按日历天数摊成日均，归到区间结束日
+// 聚合记录(如一条覆盖好几天)会被摊平，便于逐日比较近期变好/变坏
+function dailySeries(p,spanDays){
+  const pts=points(p);if(pts.length<2)return[];
+  const last=pts[pts.length-1];
+  const startTs=parseD(last.date)-spanDays*DAY;
+  let startIdx=0;
+  for(let i=0;i<pts.length-1;i++){if(parseD(pts[i].date)<=startTs)startIdx=i;}
+  let out=[];
+  for(let i=startIdx+1;i<pts.length;i++){
+    const a=pts[i-1],b=pts[i],dd=daysBetween(a.date,b.date);
+    out.push({date:b.date,rate:(b.profit-a.profit)/dd});
+  }
+  if(out.length<2){ // 保底：近期点太少则取最后最多5段
+    out=[];
+    for(let i=Math.max(1,pts.length-5);i<pts.length;i++){
+      const a=pts[i-1],b=pts[i],dd=daysBetween(a.date,b.date);
+      out.push({date:b.date,rate:(b.profit-a.profit)/dd});
+    }
+  }
+  return out;
+}
+// 近7天每日收益趋势迷你图：线往上=每天赚得越来越多(变好)，往下=变差
 function sparkline(p){
-  const pts=points(p);if(pts.length<2)return '';
-  const xs=pts.map(pt=>parseD(pt.date)),ys=pts.map(pt=>pt.profit);
-  const x0=Math.min.apply(0,xs),x1=Math.max.apply(0,xs);
+  const s=dailySeries(p,7);if(s.length<2)return '';
+  const ys=s.map(x=>x.rate);
   const y0=Math.min.apply(0,ys),y1=Math.max.apply(0,ys);
-  const W=300,H=46,pad=4;
-  const sx=x=>x1===x0?W/2:pad+(x-x0)/(x1-x0)*(W-2*pad);
+  const W=300,H=46,pad=5,n=s.length;
+  const sx=i=>pad+(n===1?0:i/(n-1))*(W-2*pad);
   const sy=y=>y1===y0?H/2:H-pad-(y-y0)/(y1-y0)*(H-2*pad);
-  const d=pts.map((pt,i)=>(i?'L':'M')+sx(xs[i]).toFixed(1)+' '+sy(ys[i]).toFixed(1)).join(' ');
+  const d=s.map((x,i)=>(i?'L':'M')+sx(i).toFixed(1)+' '+sy(x.rate).toFixed(1)).join(' ');
   const col=ys[ys.length-1]>=ys[0]?'var(--up)':'var(--down)';
   return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" '
     +'style="width:100%;height:46px;display:block">'
@@ -229,7 +250,7 @@ function trendHtml(p){
     +'<div style="font-size:15px;font-weight:600">'+(g?moneyHtml(g.money):'<span class="na">需补录</span>')+'</div>'
     +(g?'<div style="font-size:11px;color:var(--sub)">'+g.days+'天·日均 '+moneyHtml(g.money/g.days)+'</div>':'')+'</div>';
   return '<div style="background:#fafbfe;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:14px">'
-    +'<div style="font-size:12px;color:var(--sub);margin-bottom:4px">持仓收益走势</div>'+sl
+    +'<div style="font-size:12px;color:var(--sub);margin-bottom:4px">近7天每日收益趋势（线往上=越赚越多）</div>'+sl
     +'<div style="display:flex;gap:12px;margin-top:8px">'+cell('近7天收益',g7)+cell('近30天收益',g30)+'</div></div>';
 }
 function cardHtml(p){
